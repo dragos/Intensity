@@ -2,6 +2,19 @@
 
 An interval training timer for iPhone, built with SwiftUI and SwiftData.
 
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/workouts.png" width="200" alt="Workouts list"><br>Workouts</td>
+    <td align="center"><img src="docs/screenshots/work.png" width="200" alt="Timer during a work period"><br>Work period</td>
+    <td align="center"><img src="docs/screenshots/rest.png" width="200" alt="Timer during a rest period"><br>Rest period</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/history.png" width="200" alt="History with weekly streak"><br>History and streaks</td>
+    <td align="center"><img src="docs/screenshots/editor.png" width="200" alt="Workout editor"><br>Editor</td>
+    <td></td>
+  </tr>
+</table>
+
 ## Features
 
 - **Workouts** – define a workout with a name, number of rounds, work and rest durations, and a color. Drag cards to reorder them; swipe left to edit, duplicate or delete.
