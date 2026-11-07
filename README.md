@@ -20,6 +20,7 @@ An interval training timer for iPhone, built with SwiftUI and SwiftData.
 - **Workouts** – define a workout with a name, number of rounds, work and rest durations, and a color. Drag cards to reorder them; swipe left to edit, duplicate or delete.
 - **Big, glanceable timer** – a large countdown inside a progress ring, with the background color showing the current period: indigo to get ready, red-orange for work, teal for rest.
 - **Audio cues** – a beep on each of the last 3 seconds before every work period, plus tones when work, rest and the workout start or finish. Sounds play with the silent switch on and mix with your music.
+- **Lock Screen and Dynamic Island** – a Live Activity shows the current phase, round and countdown while the phone is locked or you're in another app, colored the same way as the timer.
 - **Keeps going when locked** – the timer and sounds keep running with the screen locked, and the screen stays awake while a workout is open.
 - **History and streaks** – past workouts grouped by week, a weekly streak (weeks with at least one completed workout), your best streak, and a minutes-per-week chart.
 - **Large text support** – layouts adapt to Dynamic Type, up to the accessibility sizes.
@@ -34,21 +35,26 @@ An interval training timer for iPhone, built with SwiftUI and SwiftData.
 1. Open `Intensity.xcodeproj`.
 2. To run on a simulator, pick one in the toolbar and press **⌘R**.
 3. To run on your own iPhone:
-   - In the **Intensity** target, open **Signing & Capabilities**.
-   - Choose your own **Team**. A free Apple ID's Personal Team is enough.
-   - Change the **Bundle Identifier** to something unique, for example `com.yourname.Intensity`.
+   - In **Signing & Capabilities**, choose your own **Team** for both targets, **Intensity** and **IntensityWidgets**. A free Apple ID's Personal Team is enough.
+   - Change the app's **Bundle Identifier** to something unique, for example `com.yourname.Intensity`, and the extension's to the same ID plus `.Widgets` (`com.yourname.Intensity.Widgets`).
    - Turn on **Developer Mode** on the phone (Settings → Privacy & Security), select the phone in Xcode and press **⌘R**.
+
+The first time a workout starts on a phone, iOS asks whether to allow Live Activities from Intensity; allow it to get the Lock Screen countdown.
 
 In Debug builds, launching with the `-seedHistory` argument fills History with sample sessions.
 
 ## Project layout
 
 ```
-Intensity/
+Intensity/                   The app
 ├── IntensityApp.swift       App entry, tab view, first-launch sample workouts
-├── Model/                   SwiftData models, workout timeline, weekly stats, theme
-├── Timer/                   IntervalTimer (timing engine) and SoundPlayer (synthesized cues)
+├── Model/                   SwiftData models and weekly stats
+├── Timer/                   IntervalTimer (timing engine), SoundPlayer (synthesized cues),
+│                            LiveActivityController
 └── Views/                   Workout list, editor, running workout, history
+IntensityWidgets/            Widget extension: the Lock Screen and Dynamic Island Live Activity
+Shared/                      Code used by both targets: workout timeline, theme, formatting,
+                             Live Activity attributes
 ```
 
 There are no third-party dependencies and no sound files: the cue tones are generated in code with `AVAudioEngine`.
