@@ -45,15 +45,19 @@ struct WorkoutEditorView: View {
                         .submitLabel(.done)
                 }
 
-                Section("Intervals") {
+                Section {
                     ValueStepperRow(title: "Rounds", symbol: "repeat", color: .indigo,
                                     value: $rounds, range: 1...99, step: { _ in 1 }, format: { "\($0)" })
                     ValueStepperRow(title: "Work", symbol: "flame.fill", color: .orange,
-                                    value: $workSeconds, range: 5...3600, step: Self.durationStep,
-                                    format: DurationFormat.clock)
+                                    value: $workSeconds, range: 1...3600, step: Self.durationStep,
+                                    format: DurationFormat.clock, isDuration: true)
                     ValueStepperRow(title: "Rest", symbol: "wind", color: .teal,
                                     value: $restSeconds, range: 0...3600, step: Self.durationStep,
-                                    format: { $0 == 0 ? "None" : DurationFormat.clock($0) })
+                                    format: { $0 == 0 ? "None" : DurationFormat.clock($0) }, isDuration: true)
+                } header: {
+                    Text("Intervals")
+                } footer: {
+                    Text("Tap a time to set it to the second.")
                 }
 
                 Section("Color") {
@@ -119,12 +123,13 @@ struct WorkoutEditorView: View {
         .animation(.snappy, value: plan)
     }
 
-    /// Finer steps for short durations, coarser for long ones.
+    /// Second-by-second under a minute (e.g. 7 s hangs, 53 s rests), coarser for long durations.
+    /// Exact values of any length can be set with the wheels.
     private static func durationStep(_ value: Int) -> Int {
         switch value {
-        case ..<60: 5
-        case ..<300: 15
-        default: 30
+        case ..<60: 1
+        case ..<300: 5
+        default: 15
         }
     }
 
@@ -153,36 +158,53 @@ private struct ValueStepperRow: View {
     /// Step size to use when moving up from the given value.
     let step: (Int) -> Int
     let format: (Int) -> String
+    /// Durations can also be set exactly with minute and second wheels, shown by tapping the row.
+    var isDuration = false
+
+    @State private var showsWheels = false
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: symbol)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(width: 34, height: 34)
-                .background(color.gradient, in: .rect(cornerRadius: 9))
-            VStack(alignment: .leading, spacing: 0) {
-                Text(title)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text(format(value))
-                    .font(.title2.weight(.semibold))
-                    .fontDesign(.rounded)
-                    .monospacedDigit()
-                    .contentTransition(.numericText(value: Double(value)))
+        VStack(spacing: 8) {
+            HStack(spacing: 14) {
+                Image(systemName: symbol)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(color.gradient, in: .rect(cornerRadius: 9))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text(format(value))
+                        .font(.title2.weight(.semibold))
+                        .fontDesign(.rounded)
+                        .monospacedDigit()
+                        .foregroundStyle(showsWheels ? color : .primary)
+                        .contentTransition(.numericText(value: Double(value)))
+                }
+                Spacer()
+                Stepper(title, onIncrement: increment, onDecrement: decrement)
+                    .labelsHidden()
             }
-            Spacer()
-            Stepper(title, onIncrement: increment, onDecrement: decrement)
-                .labelsHidden()
-        }
-        .padding(.vertical, 2)
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(format(value))
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment: increment()
-            case .decrement: decrement()
-            @unknown default: break
+            .padding(.vertical, 2)
+            .contentShape(.rect)
+            .onTapGesture {
+                guard isDuration else { return }
+                withAnimation(.snappy) { showsWheels.toggle() }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityValue(format(value))
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: increment()
+                case .decrement: decrement()
+                @unknown default: break
+                }
+            }
+
+            if showsWheels {
+                DurationWheels(value: $value, range: range)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -193,5 +215,41 @@ private struct ValueStepperRow: View {
 
     private func decrement() {
         withAnimation(.snappy) { value = max(range.lowerBound, value - step(value - 1)) }
+    }
+}
+
+/// Minute and second wheels for setting a duration exactly.
+private struct DurationWheels: View {
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Picker("Minutes", selection: minutes) {
+                ForEach(0...(range.upperBound / 60), id: \.self) { Text("\($0) min").tag($0) }
+            }
+            // Clipping keeps each wheel's touch area from spilling over the other.
+            .frame(maxWidth: .infinity)
+            .clipped()
+            Picker("Seconds", selection: seconds) {
+                ForEach(0..<60, id: \.self) { Text("\($0) sec").tag($0) }
+            }
+            .frame(maxWidth: .infinity)
+            .clipped()
+        }
+        .pickerStyle(.wheel)
+        .frame(height: 150)
+    }
+
+    private var minutes: Binding<Int> {
+        Binding(get: { value / 60 }, set: { setValue($0 * 60 + value % 60) })
+    }
+
+    private var seconds: Binding<Int> {
+        Binding(get: { value % 60 }, set: { setValue(value / 60 * 60 + $0) })
+    }
+
+    private func setValue(_ newValue: Int) {
+        value = min(max(newValue, range.lowerBound), range.upperBound)
     }
 }
