@@ -16,7 +16,7 @@ struct WorkoutRunView: View {
 
     init(workout: Workout) {
         self.workout = workout
-        _timer = State(initialValue: IntervalTimer(plan: workout.plan))
+        _timer = State(initialValue: IntervalTimer(plan: workout.plan, workoutName: workout.name))
     }
 
     private var isFinished: Bool { timer.state == .finished }

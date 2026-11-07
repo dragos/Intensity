@@ -12,6 +12,7 @@ final class IntervalTimer {
 
     let plan: WorkoutPlan
     let phases: [Phase]
+    let workoutName: String
 
     private(set) var state: State = .idle
     private(set) var phaseIndex = 0
@@ -24,10 +25,12 @@ final class IntervalTimer {
     @ObservationIgnored private var lastCueSecond: Int?
     @ObservationIgnored private var tickTask: Task<Void, Never>?
     @ObservationIgnored private let sounds = SoundPlayer.shared
+    @ObservationIgnored private let liveActivity = LiveActivityController()
 
-    init(plan: WorkoutPlan) {
+    init(plan: WorkoutPlan, workoutName: String) {
         self.plan = plan
         self.phases = plan.phases
+        self.workoutName = workoutName
         self.remaining = phases[0].duration
     }
 
@@ -60,6 +63,19 @@ final class IntervalTimer {
         return phases[..<phaseIndex].filter { $0.kind == .work }.count
     }
 
+    /// Snapshot for the Lock Screen and Dynamic Island.
+    private var activityState: WorkoutActivityAttributes.ContentState {
+        let end = state == .running ? (phaseEndsAt ?? .now + remaining) : .now + remaining
+        return WorkoutActivityAttributes.ContentState(
+            phase: state == .finished ? .done : PhaseStyle(currentPhase.kind),
+            round: currentPhase.round,
+            totalRounds: plan.rounds,
+            phaseStart: end - currentPhase.duration,
+            phaseEnd: end,
+            pausedRemaining: state == .paused ? remaining : nil,
+            next: nextPhase.map { "\(PhaseStyle($0.kind).title) · \(DurationFormat.short(Int($0.duration)))" })
+    }
+
     // MARK: Controls
 
     func start() {
@@ -68,6 +84,7 @@ final class IntervalTimer {
         sounds.activate()
         enterPhase(0)
         run()
+        liveActivity.start(workoutName: workoutName, state: activityState)
     }
 
     func togglePause() {
@@ -79,11 +96,13 @@ final class IntervalTimer {
         update()
         state = .paused
         tickTask?.cancel()
+        liveActivity.update(activityState)
     }
 
     func resume() {
         guard state == .paused else { return }
         run()
+        liveActivity.update(activityState)
     }
 
     func skip() {
@@ -91,13 +110,16 @@ final class IntervalTimer {
         guard phaseIndex + 1 < phases.count else { return finish() }
         enterPhase(phaseIndex + 1)
         if state == .running { phaseEndsAt = .now + remaining }
+        liveActivity.update(activityState)
     }
 
-    /// Tears down the ticker and audio. Call when leaving the workout screen.
+    /// Tears down the ticker, audio and Live Activity. Call when leaving the workout screen.
     func stop() {
         tickTask?.cancel()
         tickTask = nil
         sounds.deactivate()
+        // No-op after finish(), which already ended the activity with its summary.
+        liveActivity.end(finalState: nil)
     }
 
     // MARK: Ticking
@@ -117,6 +139,7 @@ final class IntervalTimer {
     private func update() {
         guard state == .running, var end = phaseEndsAt else { return }
         let now = Date.now
+        let startIndex = phaseIndex
         // Catch up on any phases that ended while we weren't ticking.
         while end <= now {
             guard phaseIndex + 1 < phases.count else { return finish() }
@@ -125,6 +148,7 @@ final class IntervalTimer {
         }
         phaseEndsAt = end
         remaining = end.timeIntervalSince(now)
+        if phaseIndex != startIndex { liveActivity.update(activityState) }
         cueIfNeeded()
     }
 
@@ -154,5 +178,6 @@ final class IntervalTimer {
         remaining = 0
         state = .finished
         sounds.play(.finish)
+        liveActivity.end(finalState: activityState)
     }
 }

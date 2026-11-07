@@ -25,7 +25,10 @@ struct ContentView: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
-        .task { seedIfNeeded() }
+        .task {
+            LiveActivityController.endLeftoverActivities()
+            seedIfNeeded()
+        }
     }
 
     private func seedIfNeeded() {

@@ -25,7 +25,7 @@ enum WorkoutTint: String, CaseIterable, Identifiable {
 }
 
 /// Visual identity of each period while a workout is running.
-enum PhaseStyle: CaseIterable {
+enum PhaseStyle: String, CaseIterable, Codable {
     case prepare, work, rest, done
 
     init(_ kind: PhaseKind) {
@@ -63,6 +63,12 @@ enum PhaseStyle: CaseIterable {
         case .done:    (Color(red: 0.96, green: 0.48, blue: 0.86), Color(red: 0.56, green: 0.26, blue: 0.92), Color(red: 0.18, green: 0.10, blue: 0.48))
         }
     }
+
+    /// Solid tone for surfaces that can't show the mesh, like the Lock Screen Live Activity.
+    var color: Color { palette.1 }
+
+    /// Bright tone that stays readable on the black Dynamic Island.
+    var accent: Color { palette.0 }
 
     var mesh: MeshGradient {
         let (light, mid, dark) = palette
