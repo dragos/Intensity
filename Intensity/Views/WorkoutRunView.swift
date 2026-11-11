@@ -8,9 +8,10 @@ struct WorkoutRunView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @AppStorage("soundEnabled") private var soundEnabled = true
+    @AppStorage("saveToHealth") private var saveToHealth = false
 
     @State private var timer: IntervalTimer
-    @State private var didSave = false
+    @State private var session: WorkoutSession?
     @State private var confirmingExit = false
     @State private var resumeAfterDialog = false
 
@@ -31,7 +32,7 @@ struct WorkoutRunView: View {
             CueFlash(trigger: timer.cueCount)
 
             if isFinished {
-                WorkoutSummaryView(name: workout.name, plan: workout.plan) { dismiss() }
+                WorkoutSummaryView(name: workout.name, plan: workout.plan, session: session) { dismiss() }
                     .transition(.scale(scale: 0.92).combined(with: .opacity))
             } else {
                 timerContent
@@ -257,9 +258,8 @@ struct WorkoutRunView: View {
     }
 
     private func save(completed: Bool) {
-        guard !didSave, completed || timer.roundsCompleted > 0 else { return }
-        didSave = true
-        modelContext.insert(WorkoutSession(
+        guard session == nil, completed || timer.roundsCompleted > 0 else { return }
+        let session = WorkoutSession(
             startedAt: timer.startedAt ?? .now,
             workoutName: workout.name,
             tint: workout.tint,
@@ -268,7 +268,25 @@ struct WorkoutRunView: View {
             workSeconds: workout.workSeconds,
             restSeconds: workout.restSeconds,
             duration: timer.elapsedWorkoutTime,
-            completed: completed))
+            completed: completed)
+        modelContext.insert(session)
+        self.session = session
+        saveToHealthIfEnabled(session)
+    }
+
+    private func saveToHealthIfEnabled(_ session: WorkoutSession) {
+        let health = HealthService.shared
+        guard saveToHealth, health.canSaveWorkouts else { return }
+        let recording = timer.recordingSoFar
+        let name = workout.name
+        // Runs on after the screen closes; the session updates in History when it's done.
+        Task {
+            guard let saved = try? await health.save(recording, workoutName: name) else { return }
+            session.savedToHealth = true
+            session.activeEnergy = saved.activeEnergy
+            session.averageHeartRate = saved.averageHeartRate
+            session.maxHeartRate = saved.maxHeartRate
+        }
     }
 }
 
@@ -311,6 +329,8 @@ private struct CueFlash: View {
 private struct WorkoutSummaryView: View {
     let name: String
     let plan: WorkoutPlan
+    /// Observed so the Apple Health line appears once saving there finishes.
+    let session: WorkoutSession?
     var onDone: () -> Void
 
     @Query private var sessions: [WorkoutSession]
@@ -337,6 +357,10 @@ private struct WorkoutSummaryView: View {
                 SummaryStat(value: "\(plan.rounds)", label: "Rounds")
                 SummaryStat(value: "\(stats.currentStreak)", label: "Week streak")
             }
+            if let session, session.savedToHealth {
+                HealthSummary(session: session)
+                    .transition(.opacity)
+            }
             Spacer()
             Button(action: onDone) {
                 Text("Done")
@@ -348,7 +372,34 @@ private struct WorkoutSummaryView: View {
             .buttonStyle(.plain)
         }
         .padding(24)
+        .animation(.smooth, value: session?.savedToHealth)
         .onAppear { appeared = true }
+    }
+}
+
+/// "Saved to Apple Health", plus heart rate and calories when Health has them.
+private struct HealthSummary: View {
+    let session: WorkoutSession
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Label("Saved to Apple Health", systemImage: "heart.fill")
+                .font(.subheadline.weight(.semibold))
+            let details = [
+                session.averageHeartRate.map { "avg \(Int($0.rounded())) bpm" },
+                session.maxHeartRate.map { "max \(Int($0.rounded())) bpm" },
+                session.activeEnergy.map { "\(Int($0.rounded())) kcal (est.)" },
+            ].compactMap { $0 }
+            if !details.isEmpty {
+                Text(details.joined(separator: " · "))
+                    .font(.footnote.weight(.medium))
+                    .monospacedDigit()
+                    .opacity(0.85)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .glassEffect(.regular, in: .rect(cornerRadius: 18))
     }
 }
 

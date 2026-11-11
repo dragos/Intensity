@@ -7,6 +7,7 @@ struct WorkoutListView: View {
     private var workouts: [Workout]
 
     @State private var isCreating = false
+    @State private var showsSettings = false
     @State private var editing: Workout?
     @State private var running: Workout?
 
@@ -50,10 +51,14 @@ struct WorkoutListView: View {
             }
             .navigationTitle("Workouts")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Settings", systemImage: "gearshape") { showsSettings = true }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button("New Workout", systemImage: "plus") { isCreating = true }
                 }
             }
+            .sheet(isPresented: $showsSettings) { SettingsView() }
             .sheet(isPresented: $isCreating) { WorkoutEditorView(workout: nil) }
             .sheet(item: $editing) { WorkoutEditorView(workout: $0) }
             .fullScreenCover(item: $running) { WorkoutRunView(workout: $0) }

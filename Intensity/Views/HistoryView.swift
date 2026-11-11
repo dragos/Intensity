@@ -246,6 +246,12 @@ private struct SessionRow: View {
                 Text(session.startedAt, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if let heartRate = session.averageHeartRate {
+                    Label("\(Int(heartRate.rounded())) bpm avg", systemImage: "heart.fill")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.pink)
+                        .monospacedDigit()
+                }
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {

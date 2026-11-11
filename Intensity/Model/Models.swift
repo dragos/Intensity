@@ -47,6 +47,11 @@ final class WorkoutSession {
     var restSeconds: Int = 0
     var duration: TimeInterval = 0
     var completed: Bool = false
+    /// Filled in once the workout has been saved to Apple Health.
+    var savedToHealth: Bool = false
+    var activeEnergy: Double?
+    var averageHeartRate: Double?
+    var maxHeartRate: Double?
 
     init(startedAt: Date, workoutName: String, tint: WorkoutTint, roundsCompleted: Int, totalRounds: Int,
          workSeconds: Int, restSeconds: Int, duration: TimeInterval, completed: Bool) {

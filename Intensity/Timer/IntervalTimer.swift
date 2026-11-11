@@ -22,6 +22,9 @@ final class IntervalTimer {
     private(set) var startedAt: Date?
 
     @ObservationIgnored private var phaseEndsAt: Date?
+    @ObservationIgnored private var phaseStartedAt: Date?
+    @ObservationIgnored private var pausedAt: Date?
+    @ObservationIgnored private var recording = WorkoutRecording()
     @ObservationIgnored private var lastCueSecond: Int?
     @ObservationIgnored private var tickTask: Task<Void, Never>?
     @ObservationIgnored private let sounds = SoundPlayer.shared
@@ -63,6 +66,18 @@ final class IntervalTimer {
         return phases[..<phaseIndex].filter { $0.kind == .work }.count
     }
 
+    /// The workout's timeline so far, for Apple Health. For a workout ended early, the
+    /// interval in progress counts up to now, or up to when it was paused.
+    var recordingSoFar: WorkoutRecording {
+        guard state != .finished, let phaseStartedAt else { return recording }
+        var copy = recording
+        let end = pausedAt ?? .now
+        if currentPhase.kind != .prepare, end > phaseStartedAt {
+            copy.intervals.append(.init(kind: currentPhase.kind, dates: DateInterval(start: phaseStartedAt, end: end)))
+        }
+        return copy
+    }
+
     /// Snapshot for the Lock Screen and Dynamic Island.
     private var activityState: WorkoutActivityAttributes.ContentState {
         let end = state == .running ? (phaseEndsAt ?? .now + remaining) : .now + remaining
@@ -82,7 +97,7 @@ final class IntervalTimer {
         guard state == .idle else { return }
         startedAt = .now
         sounds.activate()
-        enterPhase(0)
+        enterPhase(0, at: .now)
         run()
         liveActivity.start(workoutName: workoutName, state: activityState)
     }
@@ -95,20 +110,23 @@ final class IntervalTimer {
         guard state == .running else { return }
         update()
         state = .paused
+        pausedAt = .now
         tickTask?.cancel()
         liveActivity.update(activityState)
     }
 
     func resume() {
         guard state == .paused else { return }
+        if let pausedAt { recording.pauses.append(DateInterval(start: pausedAt, end: .now)) }
+        pausedAt = nil
         run()
         liveActivity.update(activityState)
     }
 
     func skip() {
         guard state == .running || state == .paused else { return }
-        guard phaseIndex + 1 < phases.count else { return finish() }
-        enterPhase(phaseIndex + 1)
+        guard phaseIndex + 1 < phases.count else { return finish(at: pausedAt ?? .now) }
+        enterPhase(phaseIndex + 1, at: .now)
         if state == .running { phaseEndsAt = .now + remaining }
         liveActivity.update(activityState)
     }
@@ -142,8 +160,8 @@ final class IntervalTimer {
         let startIndex = phaseIndex
         // Catch up on any phases that ended while we weren't ticking.
         while end <= now {
-            guard phaseIndex + 1 < phases.count else { return finish() }
-            enterPhase(phaseIndex + 1)
+            guard phaseIndex + 1 < phases.count else { return finish(at: end) }
+            enterPhase(phaseIndex + 1, at: end)
             end += currentPhase.duration
         }
         phaseEndsAt = end
@@ -152,7 +170,11 @@ final class IntervalTimer {
         cueIfNeeded()
     }
 
-    private func enterPhase(_ index: Int) {
+    /// Moves to a phase. `date` is when it began: the scheduled boundary when catching up,
+    /// so the recorded timeline stays exact even if ticks ran late.
+    private func enterPhase(_ index: Int, at date: Date) {
+        closeCurrentPhase(at: date)
+        phaseStartedAt = date
         phaseIndex = index
         remaining = phases[index].duration
         lastCueSecond = nil
@@ -173,7 +195,15 @@ final class IntervalTimer {
         sounds.play(.countdown)
     }
 
-    private func finish() {
+    private func closeCurrentPhase(at date: Date) {
+        guard let phaseStartedAt, currentPhase.kind != .prepare, date > phaseStartedAt else { return }
+        recording.intervals.append(.init(kind: currentPhase.kind, dates: DateInterval(start: phaseStartedAt, end: date)))
+    }
+
+    private func finish(at date: Date) {
+        closeCurrentPhase(at: date)
+        phaseStartedAt = nil
+        pausedAt = nil
         tickTask?.cancel()
         remaining = 0
         state = .finished
